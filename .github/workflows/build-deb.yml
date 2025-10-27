@@ -1,4 +1,4 @@
-name: Build .deb
+name: Build and Package cronie
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  build-deb:
+  release-cronie:
     runs-on: ubuntu-latest
     permissions:
       contents: read

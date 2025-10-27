@@ -1,0 +1,98 @@
+name: Build and Package Cronie CLI
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - 'v*.0.0'  # Only major versions manually pushed
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git fetch --tags
+
+      - name: Determine if major or minor release
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            # Manual tag push (major release)
+            tag="${GITHUB_REF#refs/tags/}"
+            version="${tag#v}"
+            echo "Manual tag detected: $tag"
+            echo "tag=$tag" >> $GITHUB_OUTPUT
+            echo "version=$version" >> $GITHUB_OUTPUT
+            echo "type=major" >> $GITHUB_OUTPUT
+          else
+            # Auto minor release
+            latest=$(git tag --list 'v*.*.*' --sort=-v:refname | head -n 1)
+            if [[ -z "$latest" ]]; then
+              major=0
+              minor=1
+            else
+              major=$(echo "$latest" | cut -d. -f1 | sed 's/v//')
+              minor=$(echo "$latest" | cut -d. -f2)
+              patch=$(echo "$latest" | cut -d. -f3)
+              if [[ "$patch" != "0" ]]; then
+                echo "Previous patch != 0, resetting to minor bump"
+              fi
+              minor=$((minor + 1))
+            fi
+            new_version="${major}.${minor}.0"
+            new_tag="v$new_version"
+
+            echo "Auto minor release: $new_tag"
+            git tag "$new_tag"
+            git push origin "$new_tag"
+
+            echo "tag=$new_tag" >> $GITHUB_OUTPUT
+            echo "version=$new_version" >> $GITHUB_OUTPUT
+            echo "type=minor" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set VERSION env
+        run: |
+          export VERSION="${{ steps.version.outputs.version }}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Build .deb package
+        run: |
+          mkdir -p pkg/usr/local/bin
+          cp cronie.sh pkg/usr/local/bin/cronie
+          chmod +x pkg/usr/local/bin/cronie
+
+          mkdir -p pkg/DEBIAN
+          cat <<EOF > pkg/DEBIAN/control
+          Package: cronie
+          Version: ${{ steps.version.outputs.version }}
+          Section: utils
+          Priority: optional
+          Architecture: all
+          Maintainer: GitHub Actions <actions@github.com>
+          Description: Cronie - Interactive systemd timer manager (${{ steps.version.outputs.type }} release)
+          EOF
+
+          dpkg-deb --build pkg cronie_${{ steps.version.outputs.version }}.deb
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Cronie ${{ steps.version.outputs.tag }}"
+          generate_release_notes: true
+          files: cronie_*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
