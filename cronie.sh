@@ -291,7 +291,7 @@ Description=${description}
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c '${absolute_script_path} &>> "${absolute_log_path_base}/$(date +\\%Y-\\%m-\\%d).log"'
+ExecStart=/bin/bash -c '${absolute_script_path} &>> "${absolute_log_path_base}/$(date +%%Y-%%m-%%d).log"'
 EOF
 
     # Create .timer file
@@ -301,7 +301,8 @@ Description=${description}
 
 [Timer]
 OnCalendar=${on_calendar_value}
-Persistent=true
+Persistent=false
+AccuracySec=1s
 
 [Install]
 WantedBy=timers.target
@@ -375,6 +376,7 @@ EOF
     systemctl ${SYSTEMCTL_ARGS} enable --now "${timer_name}.timer"
 
     _log_success "Timer '${timer_name}' created and activated successfully!"
+    _log_info "You can edit the executable script at: ${script_path}"
     _press_any_key
 }
 
@@ -519,10 +521,23 @@ _edit_timer_menu() {
                 local on_calendar_value human_interval
                 IFS='|' read -r on_calendar_value human_interval <<< "$schedule_info"
                 
-                sed -i "s|^OnCalendar=.*|OnCalendar=${on_calendar_value}|" "$timer_file"
+                # Regenerate the timer file to ensure its format is correct and includes precision settings.
+                local current_desc
+                current_desc=$(grep "^Description=" "$timer_file" | cut -d'=' -f2-)
+                cat << EOF > "$timer_file"
+[Unit]
+Description=${current_desc}
+
+[Timer]
+OnCalendar=${on_calendar_value}
+Persistent=false
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
+EOF
                 sed -i "s|^Interval:.*|Interval: ${human_interval}|" "$info_log"
                 sed -i "s|^OnCalendar Value:.*|OnCalendar Value: ${on_calendar_value}|" "$info_log"
-                
                 systemctl ${SYSTEMCTL_ARGS} daemon-reload
                 systemctl ${SYSTEMCTL_ARGS} restart "${timer_name}.timer"
                 _log_success "Schedule updated and timer restarted."
