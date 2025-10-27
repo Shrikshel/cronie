@@ -76,7 +76,7 @@ jobs:
 
           mkdir -p pkg/DEBIAN
           cat <<EOF > pkg/DEBIAN/control
-          Package: cronie
+          Package: cronie-tools1618
           Version: ${{ steps.version.outputs.version }}
           Section: utils
           Priority: optional
