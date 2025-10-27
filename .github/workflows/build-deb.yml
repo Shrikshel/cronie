@@ -1,0 +1,73 @@
+name: Build .deb
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version from cronie.sh
+        id: version
+        run: |
+          set -euo pipefail
+          if [[ -f cronie.sh ]]; then
+            # Extract value of readonly SCRIPT_VERSION="..."
+            ver=$(grep -E '^readonly SCRIPT_VERSION="' cronie.sh | head -n1 | sed -E 's/.*"([^"]+)".*/\1/') || true
+          fi
+          if [[ -z "${ver:-}" ]]; then
+            ver="0.0.0"
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare package filesystem
+        run: |
+          set -euo pipefail
+          PACKAGE_NAME=cronie
+          VERSION="${{ steps.version.outputs.version }}"
+          PKGDIR=$(pwd)/pkg/${PACKAGE_NAME}_${VERSION}
+          mkdir -p "${PKGDIR}/DEBIAN"
+          mkdir -p "${PKGDIR}/usr/bin"
+          mkdir -p "${PKGDIR}/usr/share/doc/${PACKAGE_NAME}"
+
+          # Install script into /usr/bin/cronie
+          if [[ -f cronie.sh ]]; then
+            install -m 0755 cronie.sh "${PKGDIR}/usr/bin/${PACKAGE_NAME}"
+          else
+            echo "cronie.sh not found in repository" >&2
+            exit 1
+          fi
+
+          # Minimal control file
+          cat > "${PKGDIR}/DEBIAN/control" <<EOF
+Package: ${PACKAGE_NAME}
+Version: ${VERSION}
+Section: utils
+Priority: optional
+Architecture: all
+Maintainer: GitHub Actions <actions@github.com>
+Description: cronie - A friendly, interactive manager for systemd timers.
+EOF
+
+      - name: Build .deb package
+        run: |
+          set -euo pipefail
+          PACKAGE_NAME=cronie
+          VERSION="${{ steps.version.outputs.version }}"
+          PKGDIR=$(pwd)/pkg/${PACKAGE_NAME}_${VERSION}
+          dpkg-deb --build "${PKGDIR}"
+          # dpkg-deb appends .deb automatically
+          mv "${PKGDIR}.deb" "${PACKAGE_NAME}_${VERSION}_all.deb"
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cronie-deb
+          path: cronie_${{ steps.version.outputs.version }}_all.deb
