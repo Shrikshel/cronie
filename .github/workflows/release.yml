@@ -71,7 +71,7 @@ jobs:
       - name: Build .deb package
         run: |
           mkdir -p pkg/usr/local/bin
-          cp cronie.sh pkg/usr/local/bin/cronie    # 👈 remove .sh extension
+          cp cronie.sh pkg/usr/local/bin/ct    # 👈 remove .sh extension
           chmod 755 pkg/usr/local/bin/cronie
 
           mkdir -p pkg/DEBIAN

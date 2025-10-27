@@ -36,5 +36,5 @@ else
 fi
 
 echo "✅ Cronie installed successfully!"
-echo "Run with: cronie"
+echo "Run with: ct"
 rm -rf "$TMP_DIR"
