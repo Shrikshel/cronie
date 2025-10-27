@@ -394,8 +394,8 @@ list_timers() {
         return
     fi
 
-    printf "%-25s %-12s %-30s %-30s\n" "TIMER NAME" "STATUS" "INTERVAL" "NEXT RUN"
-    printf '%.0s-' {1..100} && echo
+    printf "%-20s %-12s %-25s %-22s %-22s\n" "TIMER NAME" "STATUS" "INTERVAL" "LAST RUN" "NEXT RUN"
+    printf '%.0s-' {1..110} && echo
 
     for dir in "${timer_dirs[@]}"; do
         local timer_name
@@ -403,7 +403,7 @@ list_timers() {
         local info_log="${dir}/${timer_name}_INFORMATION_LOG.log"
 
         if [[ ! -f "$info_log" ]]; then
-            printf "%-25s %-12s %-30s %-30s\n" "$timer_name" "INVALID" "Info log missing" "n/a"
+            printf "%-20s %-12s %-25s %-22s %-22s\n" "$timer_name" "INVALID" "Info log missing" "n/a" "n/a"
             continue
         fi
 
@@ -423,14 +423,27 @@ list_timers() {
         local interval
         interval=$(grep "^Interval:" "$info_log" | cut -d' ' -f2-)
 
-        # Get Next Run time using a reliable method
-        local next_run
-        next_run=$(systemctl ${SYSTEMCTL_ARGS} show "${timer_name}.timer" -p NextElapsedUSecRealtime --value 2>/dev/null || echo "n/a")
-        if [[ "$next_run" == "0" || "$next_run" == "n/a" ]]; then
-            next_run="n/a"
+        # Get Last Run time
+        local last_run_usec
+        last_run_usec=$(systemctl ${SYSTEMCTL_ARGS} show "${timer_name}.timer" -p LastTriggerUSec --value 2>/dev/null || echo "0")
+        local last_run
+        if [[ "$last_run_usec" == "0" ]]; then
+            last_run="n/a"
+        else
+            last_run=$(date -d "@$(($last_run_usec / 1000000))" '+%Y-%m-%d %H:%M:%S')
         fi
 
-        printf "%-25s %-12b %-30s %-30s\n" "$timer_name" "$status" "$interval" "$next_run"
+        # Get Next Run time
+        local next_run_usec
+        next_run_usec=$(systemctl ${SYSTEMCTL_ARGS} show "${timer_name}.timer" -p NextElapseUSecRealtime --value 2>/dev/null || echo "0")
+        local next_run
+        if [[ "$next_run_usec" == "0" ]]; then
+            next_run="n/a"
+        else
+            next_run=$(date -d "@$(($next_run_usec / 1000000))" '+%Y-%m-%d %H:%M:%S')
+        fi
+
+        printf "%-20s %-12b %-25s %-22s %-22s\n" "$timer_name" "$status" "$interval" "$last_run" "$next_run"
     done
     _press_any_key
 }
